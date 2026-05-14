@@ -1,0 +1,18 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+*.egg-info/
+
+# Node / VS Code extension
+node_modules/
+out/
+*.vsix
+
+# Scores (workspace-local)
+.comprendo_scores.json
+
+# Misc
+.DS_Store
+*.log
