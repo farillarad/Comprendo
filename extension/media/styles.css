@@ -1,0 +1,173 @@
+:root {
+  --bg: var(--vscode-sideBar-background, #1e1e1e);
+  --fg: var(--vscode-foreground, #cccccc);
+  --fg-muted: var(--vscode-descriptionForeground, #888888);
+  --surface: var(--vscode-editor-background, #252526);
+  --border: var(--vscode-panel-border, #444444);
+  --accent: #4fc3f7;
+  --accent-dk: #0288d1;
+  --btn-bg: var(--vscode-button-background, #0e639c);
+  --btn-fg: var(--vscode-button-foreground, #ffffff);
+  --btn2-bg: var(--vscode-button-secondaryBackground, #3a3d41);
+  --btn2-fg: var(--vscode-button-secondaryForeground, #cccccc);
+  --input-bg: var(--vscode-input-background, #3c3c3c);
+  --input-border: var(--vscode-input-border, #555555);
+  --input-fg: var(--vscode-input-foreground, #cccccc);
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  font-family: var(--vscode-font-family, 'Segoe UI', sans-serif);
+  font-size: 13px;
+  color: var(--fg);
+  background: var(--bg);
+  padding: 12px;
+  line-height: 1.5;
+  min-height: 100vh;
+}
+
+.hidden { display: none !important; }
+.center { text-align: center; }
+
+/* ── States ── */
+.state { display: flex; flex-direction: column; gap: 10px; }
+
+/* ── Welcome ── */
+.welcome-icon { font-size: 36px; text-align: center; margin: 24px 0 4px; }
+.hint { font-size: 12px; color: var(--fg-muted); text-align: center; line-height: 1.7; }
+.hint.muted { margin-top: 4px; }
+.hint strong { color: var(--fg); }
+
+/* ── Loading ── */
+.loader { height: 3px; background: var(--surface); border-radius: 2px; overflow: hidden; }
+.loader-bar {
+  height: 100%;
+  background: var(--accent);
+  border-radius: 2px;
+  animation: slide 1.4s ease-in-out infinite;
+  width: 40%;
+}
+@keyframes slide {
+  0%   { transform: translateX(-150%); }
+  100% { transform: translateX(400%); }
+}
+
+/* ── Error ── */
+.error-icon { font-size: 28px; text-align: center; margin: 16px 0 4px; }
+.error-text { color: #f48771; font-size: 12px; text-align: center; line-height: 1.6; }
+
+/* ── Explanation ── */
+.file-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--border);
+}
+.file-icon { font-size: 15px; }
+.filename { font-weight: 600; font-size: 13px; color: var(--accent); word-break: break-all; }
+
+.content-box {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 10px 12px;
+  font-size: 12px;
+  line-height: 1.7;
+  white-space: pre-wrap;
+  word-break: break-word;
+  max-height: 55vh;
+  overflow-y: auto;
+}
+
+/* ── Buttons ── */
+.btn-primary,
+.btn-secondary {
+  width: 100%;
+  padding: 8px 12px;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 600;
+  transition: opacity 0.15s;
+}
+.btn-primary { background: var(--btn-bg); color: var(--btn-fg); }
+.btn-secondary { background: var(--btn2-bg); color: var(--btn2-fg); }
+.btn-primary:hover:not(:disabled),
+.btn-secondary:hover:not(:disabled) { opacity: 0.85; }
+.btn-primary:disabled,
+.btn-secondary:disabled { opacity: 0.4; cursor: default; }
+
+/* ── Quiz ── */
+.quiz-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--border);
+}
+.tag {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  background: var(--accent-dk);
+  color: #fff;
+  padding: 2px 8px;
+  border-radius: 10px;
+}
+.muted-small { font-size: 11px; color: var(--fg-muted); }
+
+.question-text {
+  font-size: 13px;
+  line-height: 1.6;
+  background: var(--surface);
+  padding: 10px 12px;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+}
+
+.answer-input {
+  width: 100%;
+  min-height: 80px;
+  background: var(--input-bg);
+  color: var(--input-fg);
+  border: 1px solid var(--input-border);
+  border-radius: 4px;
+  padding: 8px;
+  font-size: 12px;
+  font-family: inherit;
+  resize: vertical;
+}
+.answer-input:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+/* ── Result ── */
+.result-badge {
+  padding: 12px;
+  border-radius: 6px;
+  font-size: 16px;
+  font-weight: 700;
+  text-align: center;
+}
+.result-badge.correct  { background: #1b3a1e; color: #81c784; }
+.result-badge.incorrect { background: #3a1e1e; color: #ef9a9a; }
+
+.feedback-text {
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--fg-muted);
+  background: var(--surface);
+  padding: 8px 12px;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+}
+
+/* ── Score ── */
+.score-display { text-align: center; padding: 20px 0 4px; }
+.score-num  { font-size: 52px; font-weight: 700; color: var(--accent); }
+.score-denom { font-size: 28px; color: var(--fg-muted); }
+.score-pct  { font-size: 16px; font-weight: 600; text-align: center; margin-bottom: 4px; }

@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta http-equiv="Content-Security-Policy"
+    content="default-src 'none'; style-src {{cspSource}} 'unsafe-inline'; script-src 'unsafe-inline';">
+  <link rel="stylesheet" href="{{stylesUri}}">
+  <title>Comprendo</title>
+</head>
+<body>
+  <div id="app">
+
+    <!-- Welcome -->
+    <div id="s-welcome" class="state">
+      <div class="welcome-icon">🧠</div>
+      <p class="hint">Select code → right-click →<br><strong>Comprendo: Explain This</strong></p>
+      <p class="hint muted">or run <strong>Comprendo: Open Brain Tree</strong><br>to explore your whole codebase</p>
+    </div>
+
+    <!-- Loading -->
+    <div id="s-loading" class="state hidden">
+      <div class="loader"><div class="loader-bar"></div></div>
+      <p id="loadingMsg" class="hint muted">Loading…</p>
+    </div>
+
+    <!-- Error -->
+    <div id="s-error" class="state hidden">
+      <div class="error-icon">⚠</div>
+      <p id="errorMsg" class="error-text"></p>
+    </div>
+
+    <!-- Explanation -->
+    <div id="s-explanation" class="state hidden">
+      <div class="file-header">
+        <span class="file-icon">📄</span>
+        <span id="expFileName" class="filename"></span>
+      </div>
+      <div id="expContent" class="content-box"></div>
+      <button id="quizBtn" class="btn-primary">Quiz Me →</button>
+    </div>
+
+    <!-- Question -->
+    <div id="s-question" class="state hidden">
+      <div class="quiz-header">
+        <span class="tag">Quiz</span>
+        <span id="qProgress" class="muted-small"></span>
+      </div>
+      <p id="qText" class="question-text"></p>
+      <textarea id="answerInput" class="answer-input"
+        placeholder="Type your answer… (Ctrl+Enter to submit)"></textarea>
+      <button id="submitBtn" class="btn-primary">Submit Answer</button>
+    </div>
+
+    <!-- Result -->
+    <div id="s-result" class="state hidden">
+      <div id="resultBadge" class="result-badge"></div>
+      <p id="feedbackText" class="feedback-text"></p>
+      <button id="nextBtn" class="btn-secondary">Next Question →</button>
+      <button id="finishBtn" class="btn-secondary hidden">See My Score →</button>
+    </div>
+
+    <!-- Done -->
+    <div id="s-done" class="state hidden">
+      <div class="score-display">
+        <span id="scoreNum" class="score-num"></span>
+        <span id="scoreDenom" class="score-denom"></span>
+      </div>
+      <p id="scorePct" class="score-pct"></p>
+      <p class="muted-small center">Saved to .comprendo/scores.json</p>
+      <button id="retryBtn" class="btn-secondary">← Back to Explanation</button>
+    </div>
+
+  </div>
+
+  <script>
+    const vscode = acquireVsCodeApi();
+    let questions = [];
+    let currentIdx = 0;
+
+    function show(id) {
+      document.querySelectorAll('.state').forEach(el => el.classList.add('hidden'));
+      document.getElementById(id).classList.remove('hidden');
+    }
+
+    document.getElementById('quizBtn').addEventListener('click', () => {
+      vscode.postMessage({ type: 'quizMe' });
+    });
+
+    document.getElementById('submitBtn').addEventListener('click', submitAnswer);
+
+    document.getElementById('answerInput').addEventListener('keydown', e => {
+      if (e.key === 'Enter' && e.ctrlKey) submitAnswer();
+    });
+
+    document.getElementById('nextBtn').addEventListener('click', () => {
+      currentIdx++;
+      renderQuestion(currentIdx);
+    });
+
+    document.getElementById('finishBtn').addEventListener('click', () => {
+      vscode.postMessage({ type: 'finishQuiz' });
+    });
+
+    document.getElementById('retryBtn').addEventListener('click', () => {
+      show('s-explanation');
+    });
+
+    function submitAnswer() {
+      const answer = document.getElementById('answerInput').value.trim();
+      if (!answer) return;
+      document.getElementById('submitBtn').disabled = true;
+      vscode.postMessage({ type: 'submitAnswer', answer });
+    }
+
+    function renderQuestion(idx) {
+      document.getElementById('qText').textContent = questions[idx];
+      document.getElementById('qProgress').textContent = `${idx + 1} of ${questions.length}`;
+      document.getElementById('answerInput').value = '';
+      document.getElementById('submitBtn').disabled = false;
+      show('s-question');
+    }
+
+    window.addEventListener('message', ({ data: msg }) => {
+      switch (msg.type) {
+        case 'loading':
+          document.getElementById('loadingMsg').textContent = msg.message;
+          show('s-loading');
+          break;
+
+        case 'error':
+          document.getElementById('errorMsg').textContent = msg.message;
+          show('s-error');
+          break;
+
+        case 'explanation':
+          document.getElementById('expFileName').textContent = msg.fileName;
+          document.getElementById('expContent').textContent = msg.content;
+          show('s-explanation');
+          break;
+
+        case 'questions':
+          questions = msg.questions;
+          currentIdx = 0;
+          renderQuestion(0);
+          break;
+
+        case 'answerResult': {
+          const badge = document.getElementById('resultBadge');
+          badge.textContent = msg.correct ? '✓  Correct' : '✗  Incorrect';
+          badge.className = 'result-badge ' + (msg.correct ? 'correct' : 'incorrect');
+          document.getElementById('feedbackText').textContent = msg.feedback;
+          const nextBtn = document.getElementById('nextBtn');
+          const finishBtn = document.getElementById('finishBtn');
+          if (msg.isLast) {
+            nextBtn.classList.add('hidden');
+            finishBtn.classList.remove('hidden');
+          } else {
+            nextBtn.classList.remove('hidden');
+            finishBtn.classList.add('hidden');
+          }
+          show('s-result');
+          break;
+        }
+
+        case 'quizDone': {
+          document.getElementById('scoreNum').textContent = msg.correct;
+          document.getElementById('scoreDenom').textContent = ` / ${msg.total}`;
+          const pct = Math.round(msg.correct / msg.total * 100);
+          document.getElementById('scorePct').textContent = `${pct}% correct`;
+          show('s-done');
+          break;
+        }
+      }
+    });
+  </script>
+</body>
+</html>

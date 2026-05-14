@@ -1,0 +1,197 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta http-equiv="Content-Security-Policy"
+    content="default-src 'none'; script-src 'unsafe-inline' https://d3js.org; style-src 'unsafe-inline'; img-src data:;">
+  <title>Comprendo — Brain Tree</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { background: #1e1e1e; overflow: hidden; font-family: 'Segoe UI', sans-serif; }
+    #graph { width: 100vw; height: 100vh; }
+    .node circle { cursor: pointer; stroke-width: 2px; }
+    .node text { fill: #ddd; font-size: 11px; pointer-events: none; }
+    .link { stroke: #444; stroke-opacity: 0.7; }
+    .link.highlighted { stroke: #4fc3f7; stroke-opacity: 1; stroke-width: 2px; }
+    .node.dimmed circle { opacity: 0.2; }
+    .node.dimmed text { opacity: 0.2; }
+    #tooltip {
+      position: fixed; background: #2d2d2d; color: #ddd; padding: 8px 12px;
+      border-radius: 6px; font-size: 12px; pointer-events: none; opacity: 0;
+      transition: opacity 0.15s; border: 1px solid #444; max-width: 280px;
+      word-break: break-all;
+    }
+    #legend {
+      position: fixed; bottom: 16px; left: 16px; background: #2a2a2a;
+      border: 1px solid #444; border-radius: 8px; padding: 10px 14px;
+      font-size: 11px; color: #aaa;
+    }
+    #legend .row { display: flex; align-items: center; gap: 8px; margin: 4px 0; }
+    #legend .dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
+    #info {
+      position: fixed; top: 12px; left: 50%; transform: translateX(-50%);
+      color: #555; font-size: 12px; pointer-events: none; white-space: nowrap;
+    }
+    #loading {
+      position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%);
+      color: #4fc3f7; font-size: 14px; text-align: center;
+    }
+  </style>
+</head>
+<body>
+  <div id="loading">Building Brain Tree…</div>
+  <svg id="graph" style="display:none"></svg>
+  <div id="tooltip"></div>
+  <div id="info">Click a node to explain it — drag to reposition — scroll to zoom</div>
+  <div id="legend"></div>
+
+  <script src="https://d3js.org/d3.v7.min.js"></script>
+  <script>
+    const vscode = acquireVsCodeApi();
+
+    const EXT_COLORS = {
+      ts: '#81c784', tsx: '#a5d6a7',
+      js: '#fff176', jsx: '#ffe082',
+      py: '#4fc3f7',
+    };
+
+    window.addEventListener('message', ({ data: msg }) => {
+      if (msg.type === 'graphData') {
+        document.getElementById('loading').style.display = 'none';
+        document.getElementById('graph').style.display = '';
+        render(msg.data);
+      } else if (msg.type === 'error') {
+        const el = document.getElementById('loading');
+        el.textContent = 'Error: ' + msg.message;
+        el.style.color = '#f48771';
+      }
+    });
+
+    function render({ nodes, edges }) {
+      const width = window.innerWidth;
+      const height = window.innerHeight;
+
+      const svg = d3.select('#graph')
+        .attr('width', width)
+        .attr('height', height);
+
+      const g = svg.append('g');
+
+      svg.call(
+        d3.zoom()
+          .scaleExtent([0.05, 8])
+          .on('zoom', event => g.attr('transform', event.transform))
+      );
+
+      svg.append('defs').append('marker')
+        .attr('id', 'arrow')
+        .attr('viewBox', '0 -5 10 10')
+        .attr('refX', 22)
+        .attr('refY', 0)
+        .attr('markerWidth', 6)
+        .attr('markerHeight', 6)
+        .attr('orient', 'auto')
+        .append('path')
+        .attr('d', 'M0,-5L10,0L0,5')
+        .attr('fill', '#555');
+
+      const simulation = d3.forceSimulation(nodes)
+        .force('link', d3.forceLink(edges).id(d => d.id).distance(130))
+        .force('charge', d3.forceManyBody().strength(-300))
+        .force('center', d3.forceCenter(width / 2, height / 2))
+        .force('collision', d3.forceCollide(32));
+
+      const link = g.append('g')
+        .selectAll('line')
+        .data(edges)
+        .join('line')
+        .attr('class', 'link')
+        .attr('marker-end', 'url(#arrow)');
+
+      const node = g.append('g')
+        .selectAll('.node')
+        .data(nodes)
+        .join('g')
+        .attr('class', 'node')
+        .call(
+          d3.drag()
+            .on('start', (event, d) => {
+              if (!event.active) simulation.alphaTarget(0.3).restart();
+              d.fx = d.x; d.fy = d.y;
+            })
+            .on('drag', (event, d) => { d.fx = event.x; d.fy = event.y; })
+            .on('end', (event, d) => {
+              if (!event.active) simulation.alphaTarget(0);
+              d.fx = null; d.fy = null;
+            })
+        );
+
+      node.append('circle')
+        .attr('r', 14)
+        .attr('fill', d => EXT_COLORS[d.ext] || '#90a4ae')
+        .attr('stroke', '#1e1e1e');
+
+      node.append('text')
+        .attr('dy', 26)
+        .attr('text-anchor', 'middle')
+        .text(d => d.label);
+
+      const tooltip = document.getElementById('tooltip');
+
+      node
+        .on('mouseover', (event, d) => {
+          tooltip.style.opacity = '1';
+          tooltip.textContent = d.id;
+        })
+        .on('mousemove', event => {
+          tooltip.style.left = (event.clientX + 14) + 'px';
+          tooltip.style.top = (event.clientY - 10) + 'px';
+        })
+        .on('mouseout', () => { tooltip.style.opacity = '0'; })
+        .on('click', (event, d) => {
+          event.stopPropagation();
+          highlight(d, node, link, edges);
+          vscode.postMessage({ type: 'nodeClick', fullPath: d.fullPath, id: d.id });
+        });
+
+      svg.on('click', () => clearHighlight(node, link));
+
+      simulation.on('tick', () => {
+        link
+          .attr('x1', d => d.source.x).attr('y1', d => d.source.y)
+          .attr('x2', d => d.target.x).attr('y2', d => d.target.y);
+        node.attr('transform', d => `translate(${d.x},${d.y})`);
+      });
+
+      // Build legend
+      const seen = {};
+      nodes.forEach(n => { if (!(n.ext in seen)) seen[n.ext] = EXT_COLORS[n.ext] || '#90a4ae'; });
+      const legend = document.getElementById('legend');
+      Object.entries(seen).forEach(([ext, color]) => {
+        legend.innerHTML += `<div class="row"><div class="dot" style="background:${color}"></div>.${ext}</div>`;
+      });
+    }
+
+    function highlight(selected, node, link, edges) {
+      const connected = new Set([selected.id]);
+      edges.forEach(l => {
+        const s = typeof l.source === 'object' ? l.source.id : l.source;
+        const t = typeof l.target === 'object' ? l.target.id : l.target;
+        if (s === selected.id) connected.add(t);
+        if (t === selected.id) connected.add(s);
+      });
+      node.classed('dimmed', d => !connected.has(d.id));
+      link.classed('highlighted', l => {
+        const s = typeof l.source === 'object' ? l.source.id : l.source;
+        const t = typeof l.target === 'object' ? l.target.id : l.target;
+        return s === selected.id || t === selected.id;
+      });
+    }
+
+    function clearHighlight(node, link) {
+      node.classed('dimmed', false);
+      link.classed('highlighted', false);
+    }
+  </script>
+</body>
+</html>

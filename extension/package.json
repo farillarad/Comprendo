@@ -1,26 +1,37 @@
 {
   "name": "comprendo",
   "displayName": "Comprendo",
-  "description": "Understand your codebase with AI-powered dependency graphs, file explanations, and quizzes.",
+  "description": "Understand your codebase with AI-powered explanations, quizzes, and dependency graphs.",
   "version": "0.1.0",
   "publisher": "farillarad",
   "engines": {
     "vscode": "^1.85.0"
   },
-  "categories": ["Other"],
-  "activationEvents": ["onStartupFinished"],
+  "categories": [
+    "Other"
+  ],
+  "activationEvents": [],
   "main": "./out/extension.js",
   "contributes": {
     "commands": [
       {
-        "command": "comprendo.openBrainTree",
-        "title": "Comprendo: Open Brain Tree"
+        "command": "comprendo.explainThis",
+        "title": "Comprendo: Explain This"
       },
       {
-        "command": "comprendo.startBackend",
-        "title": "Comprendo: Start Backend Server"
+        "command": "comprendo.openBrainTree",
+        "title": "Comprendo: Open Brain Tree"
       }
     ],
+    "menus": {
+      "editor/context": [
+        {
+          "command": "comprendo.explainThis",
+          "when": "editorHasSelection",
+          "group": "comprendo@1"
+        }
+      ]
+    },
     "configuration": {
       "title": "Comprendo",
       "properties": {
@@ -29,11 +40,6 @@
           "default": "",
           "description": "Your Claude API key (get one at console.anthropic.com)",
           "markdownDescription": "Your Claude API key. Get one at [console.anthropic.com](https://console.anthropic.com)."
-        },
-        "comprendo.backendUrl": {
-          "type": "string",
-          "default": "http://localhost:8000",
-          "description": "URL of the Comprendo FastAPI backend"
         }
       }
     },
@@ -61,9 +67,12 @@
     "compile": "tsc -p ./",
     "watch": "tsc -watch -p ./"
   },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.36.3"
+  },
   "devDependencies": {
-    "@types/vscode": "^1.85.0",
     "@types/node": "^20.0.0",
+    "@types/vscode": "^1.85.0",
     "typescript": "^5.3.0"
   }
 }
