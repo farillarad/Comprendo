@@ -38,6 +38,10 @@ export function activate(context: vscode.ExtensionContext): void {
       await startQuiz(sidebar);
     } else if (m.type === 'submitAnswer') {
       await handleAnswer(sidebar, m.answer as string);
+    } else if (m.type === 'openSettings') {
+      vscode.commands.executeCommand('workbench.action.openSettings', 'comprendo.apiKey');
+    } else if (m.type === 'openBrainTree') {
+      await openBrainTree(context, sidebar);
     }
   });
 
@@ -70,13 +74,14 @@ export function activate(context: vscode.ExtensionContext): void {
 
 function requireApiKey(sidebar?: SidebarProvider): boolean {
   if (getApiKey()) return true;
-  vscode.window.showErrorMessage(
-    'Comprendo: Add your Claude API key in Settings → Extensions → Comprendo.'
-  );
-  sidebar?.send({
-    type: 'error',
-    message: 'No API key set. Open Settings and add your key under comprendo.apiKey.',
-  });
+  vscode.window
+    .showErrorMessage('Comprendo: No API key set.', 'Open Settings')
+    .then(choice => {
+      if (choice === 'Open Settings') {
+        vscode.commands.executeCommand('workbench.action.openSettings', 'comprendo.apiKey');
+      }
+    });
+  sidebar?.send({ type: 'apiKeyError' });
   return false;
 }
 

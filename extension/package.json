@@ -48,7 +48,7 @@
         {
           "id": "comprendo-sidebar",
           "title": "Comprendo",
-          "icon": "$(book)"
+          "icon": "media/comprendo.svg"
         }
       ]
     },

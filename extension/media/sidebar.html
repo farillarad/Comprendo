@@ -14,14 +14,47 @@
     <!-- Welcome -->
     <div id="s-welcome" class="state">
       <div class="welcome-icon">🧠</div>
-      <p class="hint">Select code → right-click →<br><strong>Comprendo: Explain This</strong></p>
-      <p class="hint muted">or run <strong>Comprendo: Open Brain Tree</strong><br>to explore your whole codebase</p>
+      <h2 class="welcome-title">Comprendo</h2>
+      <p class="welcome-cta">Highlight any code and right-click →<br><strong>Comprendo: Explain This</strong><br>to get started.</p>
+      <div class="feature-list">
+        <div class="feature-item">
+          <span class="feature-icon">🔍</span>
+          <div class="feature-text">
+            <div class="feature-name">Explain This</div>
+            <div class="feature-desc">Plain-English AI breakdown of selected code</div>
+          </div>
+        </div>
+        <div class="feature-item">
+          <span class="feature-icon">🧩</span>
+          <div class="feature-text">
+            <div class="feature-name">Quiz Me</div>
+            <div class="feature-desc">Test your understanding with AI-generated questions</div>
+          </div>
+        </div>
+        <div class="feature-item">
+          <span class="feature-icon">🌳</span>
+          <div class="feature-text">
+            <div class="feature-name">Brain Tree</div>
+            <div class="feature-desc">Visualize file dependencies across your workspace</div>
+          </div>
+        </div>
+      </div>
+      <button id="openBrainTreeBtn" class="btn-secondary">Open Brain Tree →</button>
     </div>
 
     <!-- Loading -->
     <div id="s-loading" class="state hidden">
       <div class="loader"><div class="loader-bar"></div></div>
-      <p id="loadingMsg" class="hint muted">Loading…</p>
+      <p id="loadingMsg" class="loading-msg">Thinking…</p>
+    </div>
+
+    <!-- API Key Error -->
+    <div id="s-apikey" class="state hidden">
+      <div class="apikey-icon">🔑</div>
+      <p class="apikey-title">API Key Required</p>
+      <p class="apikey-desc">Add your Claude API key in settings to use Comprendo.</p>
+      <button id="openSettingsBtn" class="btn-primary btn-large">Open Settings →</button>
+      <p class="apikey-hint">Settings → Extensions → Comprendo → API Key</p>
     </div>
 
     <!-- Error -->
@@ -37,7 +70,10 @@
         <span id="expFileName" class="filename"></span>
       </div>
       <div id="expContent" class="content-box"></div>
-      <button id="quizBtn" class="btn-primary">Quiz Me →</button>
+      <div class="quiz-cta">
+        <p class="quiz-cta-label">Ready to test your understanding?</p>
+        <button id="quizBtn" class="btn-primary btn-large">🧩 Quiz Me</button>
+      </div>
     </div>
 
     <!-- Question -->
@@ -87,6 +123,14 @@
       vscode.postMessage({ type: 'quizMe' });
     });
 
+    document.getElementById('openBrainTreeBtn').addEventListener('click', () => {
+      vscode.postMessage({ type: 'openBrainTree' });
+    });
+
+    document.getElementById('openSettingsBtn').addEventListener('click', () => {
+      vscode.postMessage({ type: 'openSettings' });
+    });
+
     document.getElementById('submitBtn').addEventListener('click', submitAnswer);
 
     document.getElementById('answerInput').addEventListener('keydown', e => {
@@ -124,8 +168,12 @@
     window.addEventListener('message', ({ data: msg }) => {
       switch (msg.type) {
         case 'loading':
-          document.getElementById('loadingMsg').textContent = msg.message;
+          document.getElementById('loadingMsg').textContent = msg.message || 'Thinking…';
           show('s-loading');
+          break;
+
+        case 'apiKeyError':
+          show('s-apikey');
           break;
 
         case 'error':

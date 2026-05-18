@@ -1,14 +1,14 @@
 import Anthropic from '@anthropic-ai/sdk';
 import * as vscode from 'vscode';
 
-const MODEL = 'claude-sonnet-4-5-20250514';
+const MODEL = 'claude-sonnet-4-6';
 const MAX_TOKENS = 2048;
 
 export function getApiKey(): string {
   return vscode.workspace.getConfiguration('comprendo').get<string>('apiKey', '');
 }
 
-export async function callClaude(prompt: string): Promise<string> {
+export async function callClaude4/(prompt: string): Promise<string> {
   const apiKey = getApiKey();
   if (!apiKey) {
     throw new Error('API_KEY_NOT_SET');

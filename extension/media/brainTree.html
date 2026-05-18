@@ -7,59 +7,76 @@
   <title>Comprendo — Brain Tree</title>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
-    body { background: #1e1e1e; overflow: hidden; font-family: 'Segoe UI', sans-serif; }
-    #graph { width: 100vw; height: 100vh; }
-    .node circle { cursor: pointer; stroke-width: 2px; }
-    .node text { fill: #ddd; font-size: 11px; pointer-events: none; }
-    .link { stroke: #444; stroke-opacity: 0.7; }
-    .link.highlighted { stroke: #4fc3f7; stroke-opacity: 1; stroke-width: 2px; }
-    .node.dimmed circle { opacity: 0.2; }
-    .node.dimmed text { opacity: 0.2; }
+    body { background: #1a1a2e; overflow: hidden; font-family: 'Segoe UI', sans-serif; }
+    #graph { width: 100vw; height: 100vh; transition: opacity 0.6s ease; }
+    .node { cursor: pointer; }
+    .node text { fill: #c0c0d8; font-size: 10px; pointer-events: none; }
+    .node.dimmed circle, .node.dimmed rect { opacity: 0.1; }
+    .node.dimmed text { opacity: 0.1; }
+    .node.selected circle { stroke: #ff9800 !important; stroke-width: 3px !important; filter: drop-shadow(0 0 7px #ff9800bb); }
+    .node.selected rect { stroke: #ff9800 !important; stroke-width: 3px !important; filter: drop-shadow(0 0 8px #ff9800bb); }
+    .link { fill: none; }
+    .structural-edge { stroke: #6060a0; stroke-opacity: 0.3; stroke-width: 1px; stroke-dasharray: 4,3; }
+    .import-edge { stroke: #7986cb; stroke-opacity: 0.8; stroke-width: 1.5px; }
+    .link.highlighted { stroke: #ff9800 !important; stroke-opacity: 1 !important; stroke-width: 2.5px !important; stroke-dasharray: none !important; }
     #tooltip {
-      position: fixed; background: #2d2d2d; color: #ddd; padding: 8px 12px;
-      border-radius: 6px; font-size: 12px; pointer-events: none; opacity: 0;
-      transition: opacity 0.15s; border: 1px solid #444; max-width: 280px;
-      word-break: break-all;
+      position: fixed; background: #1e1e38; color: #ccc; padding: 9px 13px;
+      border-radius: 7px; font-size: 11px; pointer-events: none; opacity: 0;
+      transition: opacity 0.12s; border: 1px solid #4a4a7a; max-width: 340px;
+      word-break: break-all; font-family: 'Cascadia Code', 'Consolas', monospace;
+      line-height: 1.5;
     }
+    .tt-path { color: #9fa8da; }
+    .tt-type { color: #555; font-size: 10px; margin-top: 2px; }
     #legend {
-      position: fixed; bottom: 16px; left: 16px; background: #2a2a2a;
-      border: 1px solid #444; border-radius: 8px; padding: 10px 14px;
-      font-size: 11px; color: #aaa;
+      position: fixed; bottom: 16px; left: 16px; background: #1e1e38;
+      border: 1px solid #3a3a5a; border-radius: 8px; padding: 10px 14px;
+      font-size: 11px; color: #888; line-height: 1;
     }
     #legend .row { display: flex; align-items: center; gap: 8px; margin: 4px 0; }
     #legend .dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
+    #legend .square { width: 10px; height: 10px; border-radius: 2px; flex-shrink: 0; }
+    #legend .sep { border-top: 1px solid #333; margin: 6px 0; }
     #info {
       position: fixed; top: 12px; left: 50%; transform: translateX(-50%);
-      color: #555; font-size: 12px; pointer-events: none; white-space: nowrap;
+      color: #444; font-size: 11px; pointer-events: none; white-space: nowrap;
     }
     #loading {
       position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%);
-      color: #4fc3f7; font-size: 14px; text-align: center;
+      color: #7986cb; font-size: 14px; text-align: center;
     }
   </style>
 </head>
 <body>
-  <div id="loading">Building Brain Tree…</div>
-  <svg id="graph" style="display:none"></svg>
+  <div id="loading">Scanning your workspace…</div>
+  <svg id="graph" style="opacity:0; display:none"></svg>
   <div id="tooltip"></div>
-  <div id="info">Click a node to explain it — drag to reposition — scroll to zoom</div>
+  <div id="info">Click a file node to explain it · Drag to reposition · Scroll to zoom</div>
   <div id="legend"></div>
 
   <script src="https://d3js.org/d3.v7.min.js"></script>
   <script>
     const vscode = acquireVsCodeApi();
 
+    const FOLDER_COLOR = '#9575cd';
     const EXT_COLORS = {
-      ts: '#81c784', tsx: '#a5d6a7',
-      js: '#fff176', jsx: '#ffe082',
-      py: '#4fc3f7',
+      ts:     '#00e676', tsx:  '#69f0ae',
+      js:     '#ffea00', jsx:  '#ffd740',
+      py:     '#40c4ff',
+      css:    '#ff6e40', scss: '#ff80ab', less: '#ff80ab',
+      html:   '#ff5252', vue:  '#4caf50', svelte: '#ff6d00',
+      json:   '#80cbc4', md:   '#b0bec5',
     };
 
     window.addEventListener('message', ({ data: msg }) => {
       if (msg.type === 'graphData') {
         document.getElementById('loading').style.display = 'none';
-        document.getElementById('graph').style.display = '';
+        const svgEl = document.getElementById('graph');
+        svgEl.style.display = '';
         render(msg.data);
+        requestAnimationFrame(() => {
+          svgEl.style.opacity = '1';
+        });
       } else if (msg.type === 'error') {
         const el = document.getElementById('loading');
         el.textContent = 'Error: ' + msg.message;
@@ -71,42 +88,53 @@
       const width = window.innerWidth;
       const height = window.innerHeight;
 
-      const svg = d3.select('#graph')
-        .attr('width', width)
-        .attr('height', height);
-
+      const svg = d3.select('#graph').attr('width', width).attr('height', height);
       const g = svg.append('g');
 
       svg.call(
-        d3.zoom()
-          .scaleExtent([0.05, 8])
-          .on('zoom', event => g.attr('transform', event.transform))
+        d3.zoom().scaleExtent([0.04, 10]).on('zoom', ev => g.attr('transform', ev.transform))
       );
 
-      svg.append('defs').append('marker')
-        .attr('id', 'arrow')
-        .attr('viewBox', '0 -5 10 10')
-        .attr('refX', 22)
-        .attr('refY', 0)
-        .attr('markerWidth', 6)
-        .attr('markerHeight', 6)
-        .attr('orient', 'auto')
-        .append('path')
-        .attr('d', 'M0,-5L10,0L0,5')
-        .attr('fill', '#555');
+      const defs = svg.append('defs');
+
+      const makeArrow = (id, color) => {
+        defs.append('marker')
+          .attr('id', id)
+          .attr('viewBox', '0 -5 10 10')
+          .attr('refX', 28)
+          .attr('refY', 0)
+          .attr('markerWidth', 6)
+          .attr('markerHeight', 6)
+          .attr('orient', 'auto')
+          .append('path')
+          .attr('d', 'M0,-4L9,0L0,4')
+          .attr('fill', color);
+      };
+      makeArrow('arrow-import', '#7986cb');
+      makeArrow('arrow-highlighted', '#ff9800');
+
+      // Start nodes clustered at center so the spread-out animation is visible
+      nodes.forEach(n => {
+        n.x = width / 2 + (Math.random() - 0.5) * 60;
+        n.y = height / 2 + (Math.random() - 0.5) * 60;
+      });
 
       const simulation = d3.forceSimulation(nodes)
-        .force('link', d3.forceLink(edges).id(d => d.id).distance(130))
-        .force('charge', d3.forceManyBody().strength(-300))
+        .force('link', d3.forceLink(edges).id(d => d.id)
+          .distance(d => d.edgeType === 'structural' ? 85 : 130)
+          .strength(d => d.edgeType === 'structural' ? 0.7 : 0.5))
+        .force('charge', d3.forceManyBody().strength(d => d.type === 'folder' ? -550 : -220))
         .force('center', d3.forceCenter(width / 2, height / 2))
-        .force('collision', d3.forceCollide(32));
+        .force('collision', d3.forceCollide(d => d.type === 'folder' ? 36 : 22))
+        .alpha(1)
+        .alphaDecay(0.022);
 
       const link = g.append('g')
         .selectAll('line')
         .data(edges)
         .join('line')
-        .attr('class', 'link')
-        .attr('marker-end', 'url(#arrow)');
+        .attr('class', d => `link ${d.edgeType === 'import' ? 'import-edge' : 'structural-edge'}`)
+        .attr('marker-end', d => d.edgeType === 'import' ? 'url(#arrow-import)' : null);
 
       const node = g.append('g')
         .selectAll('.node')
@@ -115,43 +143,58 @@
         .attr('class', 'node')
         .call(
           d3.drag()
-            .on('start', (event, d) => {
-              if (!event.active) simulation.alphaTarget(0.3).restart();
-              d.fx = d.x; d.fy = d.y;
-            })
-            .on('drag', (event, d) => { d.fx = event.x; d.fy = event.y; })
-            .on('end', (event, d) => {
-              if (!event.active) simulation.alphaTarget(0);
-              d.fx = null; d.fy = null;
-            })
+            .on('start', (ev, d) => { if (!ev.active) simulation.alphaTarget(0.3).restart(); d.fx = d.x; d.fy = d.y; })
+            .on('drag',  (ev, d) => { d.fx = ev.x; d.fy = ev.y; })
+            .on('end',   (ev, d) => { if (!ev.active) simulation.alphaTarget(0); d.fx = null; d.fy = null; })
         );
 
-      node.append('circle')
-        .attr('r', 14)
-        .attr('fill', d => EXT_COLORS[d.ext] || '#90a4ae')
-        .attr('stroke', '#1e1e1e');
+      // Shape per node type
+      node.each(function(d) {
+        const el = d3.select(this);
+        if (d.type === 'folder') {
+          el.append('rect')
+            .attr('width', 36).attr('height', 36)
+            .attr('x', -18).attr('y', -18)
+            .attr('rx', 7)
+            .attr('fill', FOLDER_COLOR)
+            .attr('stroke', '#1a1a2e')
+            .attr('stroke-width', 2);
+        } else {
+          el.append('circle')
+            .attr('r', 13)
+            .attr('fill', EXT_COLORS[d.ext] || '#90a4ae')
+            .attr('stroke', '#1a1a2e')
+            .attr('stroke-width', 2);
+        }
+      });
 
       node.append('text')
-        .attr('dy', 26)
+        .attr('dy', d => d.type === 'folder' ? 31 : 26)
         .attr('text-anchor', 'middle')
+        .style('font-size', d => d.type === 'folder' ? '11px' : '10px')
+        .style('font-weight', d => d.type === 'folder' ? '600' : '400')
+        .style('fill', d => d.type === 'folder' ? '#d0c0f0' : '#b8b8d0')
         .text(d => d.label);
 
       const tooltip = document.getElementById('tooltip');
 
       node
-        .on('mouseover', (event, d) => {
+        .on('mouseover', (ev, d) => {
           tooltip.style.opacity = '1';
-          tooltip.textContent = d.id;
+          const kind = d.type === 'folder' ? 'folder' : (d.ext ? `.${d.ext} file` : 'file');
+          tooltip.innerHTML = `<div class="tt-path">${d.id}</div><div class="tt-type">${kind}</div>`;
         })
-        .on('mousemove', event => {
-          tooltip.style.left = (event.clientX + 14) + 'px';
-          tooltip.style.top = (event.clientY - 10) + 'px';
+        .on('mousemove', ev => {
+          tooltip.style.left = (ev.clientX + 15) + 'px';
+          tooltip.style.top  = (ev.clientY - 10) + 'px';
         })
         .on('mouseout', () => { tooltip.style.opacity = '0'; })
-        .on('click', (event, d) => {
-          event.stopPropagation();
+        .on('click', (ev, d) => {
+          ev.stopPropagation();
           highlight(d, node, link, edges);
-          vscode.postMessage({ type: 'nodeClick', fullPath: d.fullPath, id: d.id });
+          if (d.type === 'file') {
+            vscode.postMessage({ type: 'nodeClick', fullPath: d.fullPath, id: d.id });
+          }
         });
 
       svg.on('click', () => clearHighlight(node, link));
@@ -163,34 +206,63 @@
         node.attr('transform', d => `translate(${d.x},${d.y})`);
       });
 
-      // Build legend
-      const seen = {};
-      nodes.forEach(n => { if (!(n.ext in seen)) seen[n.ext] = EXT_COLORS[n.ext] || '#90a4ae'; });
+      buildLegend(nodes);
+    }
+
+    function buildLegend(nodes) {
       const legend = document.getElementById('legend');
+      legend.innerHTML = `<div class="row"><div class="square" style="background:${FOLDER_COLOR}"></div>folder</div>`;
+
+      const seen = {};
+      nodes.filter(n => n.type === 'file').forEach(n => {
+        if (!(n.ext in seen)) seen[n.ext] = EXT_COLORS[n.ext] || '#90a4ae';
+      });
       Object.entries(seen).forEach(([ext, color]) => {
         legend.innerHTML += `<div class="row"><div class="dot" style="background:${color}"></div>.${ext}</div>`;
       });
+
+      legend.innerHTML += `
+        <div class="sep"></div>
+        <div class="row">
+          <svg width="22" height="6"><line x1="0" y1="3" x2="22" y2="3" stroke="#7986cb" stroke-width="1.5" stroke-opacity="0.85"/></svg>
+          imports
+        </div>
+        <div class="row">
+          <svg width="22" height="6"><line x1="0" y1="3" x2="22" y2="3" stroke="#6060a0" stroke-width="1" stroke-dasharray="4,3" stroke-opacity="0.6"/></svg>
+          structure
+        </div>`;
     }
 
     function highlight(selected, node, link, edges) {
       const connected = new Set([selected.id]);
       edges.forEach(l => {
-        const s = typeof l.source === 'object' ? l.source.id : l.source;
-        const t = typeof l.target === 'object' ? l.target.id : l.target;
+        const s = l.source.id ?? l.source;
+        const t = l.target.id ?? l.target;
         if (s === selected.id) connected.add(t);
         if (t === selected.id) connected.add(s);
       });
-      node.classed('dimmed', d => !connected.has(d.id));
-      link.classed('highlighted', l => {
-        const s = typeof l.source === 'object' ? l.source.id : l.source;
-        const t = typeof l.target === 'object' ? l.target.id : l.target;
-        return s === selected.id || t === selected.id;
-      });
+
+      node.classed('dimmed',   d => !connected.has(d.id));
+      node.classed('selected', d => d.id === selected.id);
+
+      link
+        .classed('highlighted', l => {
+          const s = l.source.id ?? l.source;
+          const t = l.target.id ?? l.target;
+          return s === selected.id || t === selected.id;
+        })
+        .attr('marker-end', l => {
+          if (l.edgeType !== 'import') return null;
+          const s = l.source.id ?? l.source;
+          const t = l.target.id ?? l.target;
+          return (s === selected.id || t === selected.id) ? 'url(#arrow-highlighted)' : 'url(#arrow-import)';
+        });
     }
 
     function clearHighlight(node, link) {
-      node.classed('dimmed', false);
-      link.classed('highlighted', false);
+      node.classed('dimmed', false).classed('selected', false);
+      link.classed('highlighted', false)
+          .attr('marker-end', l => l.edgeType === 'import' ? 'url(#arrow-import)' : null);
     }
   </script>
 </body>

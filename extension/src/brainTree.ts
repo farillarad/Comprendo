@@ -6,11 +6,13 @@ export interface GraphNode {
   label: string;
   fullPath: string;
   ext: string;
+  type: 'file' | 'folder';
 }
 
 export interface GraphEdge {
   source: string;
   target: string;
+  edgeType: 'import' | 'structural';
 }
 
 export interface GraphData {
@@ -32,35 +34,86 @@ const IMPORT_PATTERNS: Record<string, RegExp[]> = {
   '.py':  [/^from\s+(\S+)\s+import/gm, /^import\s+(\S+)/gm],
 };
 
-function walk(dir: string, collected: string[] = []): string[] {
-  if (collected.length >= MAX_FILES) return collected;
+function walk(dir: string, files: string[] = []): string[] {
+  if (files.length >= MAX_FILES) return files;
   try {
     for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
-      if (collected.length >= MAX_FILES) break;
+      if (files.length >= MAX_FILES) break;
       const full = path.join(dir, entry.name);
       if (entry.isDirectory()) {
-        if (!EXCLUDE_DIRS.has(entry.name)) walk(full, collected);
+        if (!EXCLUDE_DIRS.has(entry.name)) walk(full, files);
       } else if (SUPPORTED_EXTS.includes(path.extname(entry.name))) {
-        collected.push(full);
+        files.push(full);
       }
     }
   } catch { /* skip inaccessible dirs */ }
-  return collected;
+  return files;
 }
 
 export function buildGraph(workspaceRoot: string): GraphData {
   const files = walk(workspaceRoot);
-  const toId = (f: string) => path.relative(workspaceRoot, f).replace(/\\/g, '/');
 
-  const nodeMap = new Map<string, GraphNode>(
-    files.map(f => [
-      toId(f),
-      { id: toId(f), label: path.basename(f), fullPath: f, ext: path.extname(f).slice(1) },
-    ])
-  );
+  const toId = (f: string): string => {
+    const rel = path.relative(workspaceRoot, f).replace(/\\/g, '/');
+    return rel === '' ? '.' : rel;
+  };
 
-  const edgeSet = new Set<string>();
+  const nodeMap = new Map<string, GraphNode>();
 
+  for (const f of files) {
+    const id = toId(f);
+    nodeMap.set(id, { id, label: path.basename(f), fullPath: f, ext: path.extname(f).slice(1), type: 'file' });
+  }
+
+  // Collect all ancestor folders of every file, up to workspaceRoot
+  const activeFolders = new Set<string>();
+  for (const f of files) {
+    let dir = path.dirname(f);
+    while (true) {
+      activeFolders.add(dir);
+      if (dir === workspaceRoot) break;
+      const parent = path.dirname(dir);
+      if (parent === dir || !dir.startsWith(workspaceRoot)) break;
+      dir = parent;
+    }
+  }
+
+  for (const dir of activeFolders) {
+    const id = toId(dir);
+    nodeMap.set(id, {
+      id,
+      label: dir === workspaceRoot ? path.basename(workspaceRoot) : path.basename(dir),
+      fullPath: dir,
+      ext: '',
+      type: 'folder',
+    });
+  }
+
+  const edges: GraphEdge[] = [];
+  const edgeKey = new Set<string>();
+
+  const addEdge = (source: string, target: string, edgeType: 'import' | 'structural') => {
+    const key = `${source}\x00${target}\x00${edgeType}`;
+    if (!edgeKey.has(key) && source !== target) {
+      edgeKey.add(key);
+      edges.push({ source, target, edgeType });
+    }
+  };
+
+  // Structural: parent folder -> direct child file
+  for (const f of files) {
+    const parentId = toId(path.dirname(f));
+    if (nodeMap.has(parentId)) addEdge(parentId, toId(f), 'structural');
+  }
+
+  // Structural: parent folder -> child folder
+  for (const dir of activeFolders) {
+    if (dir === workspaceRoot) continue;
+    const parent = path.dirname(dir);
+    if (activeFolders.has(parent)) addEdge(toId(parent), toId(dir), 'structural');
+  }
+
+  // Import edges between files
   for (const file of files) {
     const ext = path.extname(file);
     const patterns = IMPORT_PATTERNS[ext] ?? [];
@@ -73,30 +126,18 @@ export function buildGraph(workspaceRoot: string): GraphData {
       while ((m = pattern.exec(content)) !== null) {
         const imp = m[1];
         if (!imp.startsWith('.')) continue;
-
         const base = path.resolve(path.dirname(file), imp);
         let targetId: string | undefined;
-
         for (const tryExt of ['', ...SUPPORTED_EXTS]) {
           const r1 = toId(base + tryExt);
-          if (nodeMap.has(r1)) { targetId = r1; break; }
+          if (nodeMap.get(r1)?.type === 'file') { targetId = r1; break; }
           const r2 = toId(path.join(base, `index${tryExt}`));
-          if (nodeMap.has(r2)) { targetId = r2; break; }
+          if (nodeMap.get(r2)?.type === 'file') { targetId = r2; break; }
         }
-
-        if (targetId) {
-          const src = toId(file);
-          if (src !== targetId) edgeSet.add(`${src}\x00${targetId}`);
-        }
+        if (targetId) addEdge(toId(file), targetId, 'import');
       }
     }
   }
 
-  return {
-    nodes: Array.from(nodeMap.values()),
-    edges: Array.from(edgeSet).map(k => {
-      const i = k.indexOf('\x00');
-      return { source: k.slice(0, i), target: k.slice(i + 1) };
-    }),
-  };
+  return { nodes: Array.from(nodeMap.values()), edges };
 }

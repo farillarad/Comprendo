@@ -1,26 +1,18 @@
 # Comprendo
 
-A VS Code extension that helps developers understand their codebase using AI.
+A VS Code extension that helps developers understand their codebase using AI-powered explanations, quizzes, and dependency graphs.
 
 ## Features
 
-- **Brain Tree** — interactive D3.js dependency graph showing how files connect
-- **File Explanation** — click any node to get a plain-English breakdown of what the file does
-- **Quiz Mode** — test your comprehension with AI-generated questions; scores saved per file
+| | Feature | How to use |
+|---|---|---|
+| 🔍 | **Explain This** | Select code → right-click → *Comprendo: Explain This* |
+| 🧩 | **Quiz Me** | After an explanation appears, click **Quiz Me** to test your understanding |
+| 🌳 | **Brain Tree** | Run *Comprendo: Open Brain Tree* from the Command Palette (`Ctrl+Shift+P`) |
 
 ## Setup
 
-### 1. Backend
-
-```bash
-cd backend
-pip install -r requirements.txt
-uvicorn main:app --reload
-```
-
-The backend runs at `http://localhost:8000` by default.
-
-### 2. VS Code Extension
+### 1. Install the extension
 
 ```bash
 cd extension
@@ -28,52 +20,56 @@ npm install
 npm run compile
 ```
 
-Then press `F5` in VS Code to launch the extension in a new Extension Development Host window.
+Press `F5` in VS Code to launch the Extension Development Host.
 
-### 3. Add your Claude API key
+### 2. Add your Claude API key
 
-1. Open VS Code Settings (`Cmd+,` / `Ctrl+,`)
+1. Open Settings (`Ctrl+,` / `Cmd+,`)
 2. Search for `comprendo.apiKey`
-3. Paste your Claude API key (get one at [console.anthropic.com](https://console.anthropic.com))
+3. Paste your Claude API key — get one at [console.anthropic.com](https://console.anthropic.com)
 
-## Usage
+Or: when you first use any Comprendo feature without a key, a notification will appear with an **Open Settings** button.
 
-1. Make sure the backend is running
-2. Open a workspace folder in VS Code
-3. Run `Comprendo: Open Brain Tree` from the Command Palette (`Cmd+Shift+P`)
-4. Click any file node — the **Comprendo** sidebar shows the explanation
-5. Click **Quiz me** to test your understanding
+### 3. Start using Comprendo
+
+- **Explain code:** Select any code, right-click, choose **Comprendo: Explain This**. The Comprendo sidebar opens automatically.
+- **Take a quiz:** After an explanation loads, click **Quiz Me** to answer 3 AI-generated questions about the code.
+- **Explore dependencies:** Open the Command Palette (`Ctrl+Shift+P`) and run **Comprendo: Open Brain Tree** to see an interactive graph of how your files connect. Click any node to explain that file.
+
+## Activity Bar
+
+Click the Comprendo icon (node graph) in the left activity bar to open the sidebar at any time.
 
 ## Settings
 
-| Setting | Default | Description |
-|---|---|---|
-| `comprendo.apiKey` | _(empty)_ | Your Claude API key |
-| `comprendo.backendUrl` | `http://localhost:8000` | URL of the FastAPI backend |
+| Setting | Description |
+|---|---|
+| `comprendo.apiKey` | Your Claude API key (required) |
+
+## Supported Languages
+
+Brain Tree parses imports from:
+- TypeScript (`.ts`, `.tsx`)
+- JavaScript (`.js`, `.jsx`)
+- Python (`.py`)
 
 ## Project Structure
 
 ```
 comprendo/
-  extension/          # TypeScript VS Code extension
+  extension/
     src/
-      extension.ts    # Entry point, commands, settings
-      treeView.ts     # Brain Tree D3.js webview
-      sidebar.ts      # Explanation + quiz panel
+      extension.ts    # Entry point and command handlers
+      sidebar.ts      # Sidebar webview provider
+      claudeClient.ts # Claude API wrapper
+      explain.ts      # Code explanation logic
+      quiz.ts         # Quiz generation, scoring, persistence
+      brainTree.ts    # Dependency graph builder
+    media/
+      sidebar.html    # Sidebar UI
+      brainTree.html  # Brain Tree D3.js visualization
+      styles.css      # Sidebar styles
+      comprendo.svg   # Activity bar icon
     package.json
     tsconfig.json
-  backend/            # Python FastAPI
-    main.py           # App entry point
-    routes/
-      tree.py         # Dependency graph parsing
-      explain.py      # File explanation via Claude
-      quiz.py         # Quiz generation + scoring via Claude
-    requirements.txt
 ```
-
-## Supported Languages
-
-The Brain Tree parses import/dependency statements from:
-- Python (`.py`)
-- TypeScript (`.ts`, `.tsx`)
-- JavaScript (`.js`, `.jsx`, `.mjs`, `.cjs`)
