@@ -13,12 +13,18 @@
     .node text { fill: #c0c0d8; font-size: 10px; pointer-events: none; }
     .node.dimmed circle, .node.dimmed rect { opacity: 0.1; }
     .node.dimmed text { opacity: 0.1; }
+    .node.dimmed .badge { opacity: 0.1; }
     .node.selected circle { stroke: #ff9800 !important; stroke-width: 3px !important; filter: drop-shadow(0 0 7px #ff9800bb); }
     .node.selected rect { stroke: #ff9800 !important; stroke-width: 3px !important; filter: drop-shadow(0 0 8px #ff9800bb); }
+    .node.search-match circle { stroke: #00e5ff !important; stroke-width: 3px !important; filter: drop-shadow(0 0 8px #00e5ffbb); }
+    .node.search-match rect { stroke: #00e5ff !important; stroke-width: 3px !important; filter: drop-shadow(0 0 8px #00e5ffbb); }
+    .node.collapsed rect { opacity: 0.55; }
     .link { fill: none; }
     .structural-edge { stroke: #6060a0; stroke-opacity: 0.3; stroke-width: 1px; stroke-dasharray: 4,3; }
     .import-edge { stroke: #7986cb; stroke-opacity: 0.8; stroke-width: 1.5px; }
     .link.highlighted { stroke: #ff9800 !important; stroke-opacity: 1 !important; stroke-width: 2.5px !important; stroke-dasharray: none !important; }
+    .link.edge-selected { stroke: #00e5ff !important; stroke-opacity: 1 !important; stroke-width: 2.5px !important; stroke-dasharray: none !important; }
+    .link-hit { fill: none; stroke: transparent; stroke-width: 12px; cursor: pointer; }
     #tooltip {
       position: fixed; background: #1e1e38; color: #ccc; padding: 9px 13px;
       border-radius: 7px; font-size: 11px; pointer-events: none; opacity: 0;
@@ -28,6 +34,8 @@
     }
     .tt-path { color: #9fa8da; }
     .tt-type { color: #555; font-size: 10px; margin-top: 2px; }
+    .tt-imports { color: #80cbc4; margin-top: 4px; }
+    .tt-folder { color: #b39ddb; margin-top: 4px; }
     #legend {
       position: fixed; bottom: 16px; left: 16px; background: #1e1e38;
       border: 1px solid #3a3a5a; border-radius: 8px; padding: 10px 14px;
@@ -38,21 +46,81 @@
     #legend .square { width: 10px; height: 10px; border-radius: 2px; flex-shrink: 0; }
     #legend .sep { border-top: 1px solid #333; margin: 6px 0; }
     #info {
-      position: fixed; top: 12px; left: 50%; transform: translateX(-50%);
+      position: fixed; top: 52px; left: 50%; transform: translateX(-50%);
       color: #444; font-size: 11px; pointer-events: none; white-space: nowrap;
     }
     #loading {
       position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%);
       color: #7986cb; font-size: 14px; text-align: center;
     }
+    #search-bar {
+      position: fixed; top: 12px; left: 50%; transform: translateX(-50%);
+      z-index: 100; display: flex; align-items: center; gap: 8px;
+    }
+    #search-input {
+      background: #1e1e38; border: 1px solid #3a3a5a; border-radius: 20px;
+      color: #c0c0d8; padding: 6px 14px; font-size: 12px; width: 220px;
+      outline: none; transition: border-color 0.2s; font-family: 'Segoe UI', sans-serif;
+    }
+    #search-input:focus { border-color: #7986cb; }
+    #search-input::placeholder { color: #444; }
+    #search-count { color: #7986cb; font-size: 11px; min-width: 50px; }
+    #edge-panel {
+      position: fixed; right: 0; top: 0; bottom: 0; width: 270px;
+      background: #141428; border-left: 1px solid #2a2a4a;
+      transform: translateX(100%); transition: transform 0.25s ease;
+      display: flex; flex-direction: column; z-index: 200;
+    }
+    #edge-panel.open { transform: translateX(0); }
+    #edge-panel-header {
+      padding: 14px 16px 12px; border-bottom: 1px solid #2a2a4a;
+      font-size: 11px; color: #7986cb; display: flex; justify-content: space-between; align-items: center;
+      letter-spacing: 0.05em; text-transform: uppercase;
+    }
+    #edge-panel-close {
+      cursor: pointer; color: #555; font-size: 18px; line-height: 1;
+      background: none; border: none; padding: 0 2px; transition: color 0.15s;
+    }
+    #edge-panel-close:hover { color: #ccc; }
+    #edge-panel-body {
+      padding: 16px; font-size: 12px; color: #b0b0c8; line-height: 1.65; flex: 1; overflow-y: auto;
+    }
+    #edge-pair { font-size: 11px; color: #555; margin-bottom: 12px; word-break: break-all; }
+    #edge-panel-source { color: #9fa8da; }
+    #edge-panel-target { color: #9fa8da; }
+    #edge-panel-text { color: #c8c8e0; line-height: 1.7; }
+    .badge { pointer-events: none; }
+    .badge-circle { fill: #0e0e20; stroke: #4a4a7a; stroke-width: 1px; }
+    .badge-text { fill: #9fa8da; font-weight: 700; text-anchor: middle; dominant-baseline: central; }
   </style>
 </head>
 <body>
   <div id="loading">Scanning your workspace…</div>
   <svg id="graph" style="opacity:0; display:none"></svg>
   <div id="tooltip"></div>
-  <div id="info">Click a file node to explain it · Drag to reposition · Scroll to zoom</div>
+
+  <div id="search-bar">
+    <input id="search-input" type="text" placeholder="Search files…" autocomplete="off" spellcheck="false">
+    <span id="search-count"></span>
+  </div>
+
+  <div id="info">Click a node or edge · Folder click to collapse · Drag · Scroll to zoom</div>
   <div id="legend"></div>
+
+  <div id="edge-panel">
+    <div id="edge-panel-header">
+      <span>Relationship</span>
+      <button id="edge-panel-close">×</button>
+    </div>
+    <div id="edge-panel-body">
+      <div id="edge-pair">
+        <span id="edge-panel-source"></span>
+        <span style="color:#444"> → </span>
+        <span id="edge-panel-target"></span>
+      </div>
+      <div id="edge-panel-text"></div>
+    </div>
+  </div>
 
   <script src="https://d3js.org/d3.v7.min.js"></script>
   <script>
@@ -60,167 +128,302 @@
 
     const FOLDER_COLOR = '#9575cd';
     const EXT_COLORS = {
-      ts:     '#00e676', tsx:  '#69f0ae',
-      js:     '#ffea00', jsx:  '#ffd740',
-      py:     '#40c4ff',
-      css:    '#ff6e40', scss: '#ff80ab', less: '#ff80ab',
-      html:   '#ff5252', vue:  '#4caf50', svelte: '#ff6d00',
-      json:   '#80cbc4', md:   '#b0bec5',
+      ts: '#00e676', tsx: '#69f0ae',
+      js: '#ffea00', jsx: '#ffd740',
+      py: '#40c4ff',
+      css: '#ff6e40', scss: '#ff80ab', less: '#ff80ab',
+      html: '#ff5252', vue: '#4caf50', svelte: '#ff6d00',
+      json: '#80cbc4', md: '#b0bec5',
     };
+
+    let zoomBehavior, svgEl;
+    let allNodes = [], allEdges = [];
+    let nodeSelection, linkVisual, linkHit;
+    const collapsedFolders = new Set();
+    let simulation;
 
     window.addEventListener('message', ({ data: msg }) => {
       if (msg.type === 'graphData') {
         document.getElementById('loading').style.display = 'none';
-        const svgEl = document.getElementById('graph');
+        svgEl = document.getElementById('graph');
         svgEl.style.display = '';
         render(msg.data);
-        requestAnimationFrame(() => {
-          svgEl.style.opacity = '1';
-        });
+        requestAnimationFrame(() => { svgEl.style.opacity = '1'; });
       } else if (msg.type === 'error') {
         const el = document.getElementById('loading');
         el.textContent = 'Error: ' + msg.message;
         el.style.color = '#f48771';
+      } else if (msg.type === 'edgeExplanation') {
+        document.getElementById('edge-panel-text').textContent = msg.text;
       }
     });
 
+    function isHidden(id) {
+      for (const fid of collapsedFolders) {
+        if (fid === '.') {
+          if (id !== '.' && !id.includes('/')) return true;
+        } else if (id.startsWith(fid + '/')) {
+          return true;
+        }
+      }
+      return false;
+    }
+
+    function updateVisibility() {
+      nodeSelection.style('display', d => isHidden(d.id) ? 'none' : null);
+      const edgeHidden = d => {
+        const s = d.source.id ?? d.source;
+        const t = d.target.id ?? d.target;
+        return isHidden(s) || isHidden(t) ? 'none' : null;
+      };
+      linkVisual.style('display', edgeHidden);
+      linkHit.style('display', edgeHidden);
+      nodeSelection.classed('collapsed', d => d.type === 'folder' && collapsedFolders.has(d.id));
+    }
+
     function render({ nodes, edges }) {
+      allNodes = nodes;
+      allEdges = edges;
+
       const width = window.innerWidth;
       const height = window.innerHeight;
 
       const svg = d3.select('#graph').attr('width', width).attr('height', height);
       const g = svg.append('g');
 
-      svg.call(
-        d3.zoom().scaleExtent([0.04, 10]).on('zoom', ev => g.attr('transform', ev.transform))
-      );
+      zoomBehavior = d3.zoom().scaleExtent([0.04, 10]).on('zoom', ev => g.attr('transform', ev.transform));
+      svg.call(zoomBehavior);
 
       const defs = svg.append('defs');
-
-      const makeArrow = (id, color) => {
+      const makeArrow = (id, color, refX) => {
         defs.append('marker')
-          .attr('id', id)
-          .attr('viewBox', '0 -5 10 10')
-          .attr('refX', 28)
-          .attr('refY', 0)
-          .attr('markerWidth', 6)
-          .attr('markerHeight', 6)
+          .attr('id', id).attr('viewBox', '0 -5 10 10')
+          .attr('refX', refX || 28).attr('refY', 0)
+          .attr('markerWidth', 6).attr('markerHeight', 6)
           .attr('orient', 'auto')
-          .append('path')
-          .attr('d', 'M0,-4L9,0L0,4')
-          .attr('fill', color);
+          .append('path').attr('d', 'M0,-4L9,0L0,4').attr('fill', color);
       };
       makeArrow('arrow-import', '#7986cb');
       makeArrow('arrow-highlighted', '#ff9800');
+      makeArrow('arrow-edge-selected', '#00e5ff');
 
-      // Start nodes clustered at center so the spread-out animation is visible
       nodes.forEach(n => {
         n.x = width / 2 + (Math.random() - 0.5) * 60;
         n.y = height / 2 + (Math.random() - 0.5) * 60;
       });
 
-      const simulation = d3.forceSimulation(nodes)
+      // Degree map (all edges)
+      const degree = new Map();
+      nodes.forEach(n => degree.set(n.id, 0));
+      edges.forEach(e => {
+        const s = typeof e.source === 'string' ? e.source : e.source.id;
+        const t = typeof e.target === 'string' ? e.target : e.target.id;
+        degree.set(s, (degree.get(s) || 0) + 1);
+        degree.set(t, (degree.get(t) || 0) + 1);
+      });
+
+      simulation = d3.forceSimulation(nodes)
         .force('link', d3.forceLink(edges).id(d => d.id)
           .distance(d => d.edgeType === 'structural' ? 85 : 130)
           .strength(d => d.edgeType === 'structural' ? 0.7 : 0.5))
         .force('charge', d3.forceManyBody().strength(d => d.type === 'folder' ? -550 : -220))
         .force('center', d3.forceCenter(width / 2, height / 2))
         .force('collision', d3.forceCollide(d => d.type === 'folder' ? 36 : 22))
-        .alpha(1)
-        .alphaDecay(0.022);
+        .alpha(1).alphaDecay(0.022);
 
-      const link = g.append('g')
-        .selectAll('line')
-        .data(edges)
-        .join('line')
+      // Hit-area lines (wide, transparent, carry events)
+      const hitGroup = g.append('g');
+      linkHit = hitGroup.selectAll('line').data(edges).join('line')
+        .attr('class', 'link-hit');
+
+      // Visual lines (pointer-events: none so hit group handles them)
+      const visGroup = g.append('g');
+      linkVisual = visGroup.selectAll('line').data(edges).join('line')
         .attr('class', d => `link ${d.edgeType === 'import' ? 'import-edge' : 'structural-edge'}`)
+        .attr('pointer-events', 'none')
         .attr('marker-end', d => d.edgeType === 'import' ? 'url(#arrow-import)' : null);
 
-      const node = g.append('g')
-        .selectAll('.node')
-        .data(nodes)
-        .join('g')
+      // Nodes
+      const nodeGroup = g.append('g');
+      nodeSelection = nodeGroup.selectAll('.node').data(nodes).join('g')
         .attr('class', 'node')
         .call(
           d3.drag()
             .on('start', (ev, d) => { if (!ev.active) simulation.alphaTarget(0.3).restart(); d.fx = d.x; d.fy = d.y; })
-            .on('drag',  (ev, d) => { d.fx = ev.x; d.fy = ev.y; })
-            .on('end',   (ev, d) => { if (!ev.active) simulation.alphaTarget(0); d.fx = null; d.fy = null; })
+            .on('drag', (ev, d) => { d.fx = ev.x; d.fy = ev.y; })
+            .on('end', (ev, d) => { if (!ev.active) simulation.alphaTarget(0); d.fx = null; d.fy = null; })
         );
 
-      // Shape per node type
-      node.each(function(d) {
+      nodeSelection.each(function(d) {
         const el = d3.select(this);
         if (d.type === 'folder') {
           el.append('rect')
-            .attr('width', 36).attr('height', 36)
-            .attr('x', -18).attr('y', -18)
-            .attr('rx', 7)
-            .attr('fill', FOLDER_COLOR)
-            .attr('stroke', '#1a1a2e')
-            .attr('stroke-width', 2);
+            .attr('width', 36).attr('height', 36).attr('x', -18).attr('y', -18).attr('rx', 7)
+            .attr('fill', FOLDER_COLOR).attr('stroke', '#1a1a2e').attr('stroke-width', 2);
         } else {
           el.append('circle')
             .attr('r', 13)
             .attr('fill', EXT_COLORS[d.ext] || '#90a4ae')
-            .attr('stroke', '#1a1a2e')
-            .attr('stroke-width', 2);
+            .attr('stroke', '#1a1a2e').attr('stroke-width', 2);
+        }
+        el.append('text')
+          .attr('dy', d.type === 'folder' ? 31 : 26)
+          .attr('text-anchor', 'middle')
+          .style('font-size', d.type === 'folder' ? '11px' : '10px')
+          .style('font-weight', d.type === 'folder' ? '600' : '400')
+          .style('fill', d.type === 'folder' ? '#d0c0f0' : '#b8b8d0')
+          .text(d.label);
+
+        const count = degree.get(d.id) || 0;
+        if (count > 0) {
+          const bx = d.type === 'folder' ? 15 : 11;
+          const by = d.type === 'folder' ? -15 : -11;
+          const disp = count > 99 ? '99+' : String(count);
+          const r = disp.length <= 1 ? 6 : disp.length === 2 ? 8 : 10;
+          const badge = el.append('g').attr('class', 'badge').attr('transform', `translate(${bx},${by})`);
+          badge.append('circle').attr('class', 'badge-circle').attr('r', r);
+          badge.append('text').attr('class', 'badge-text').style('font-size', r <= 6 ? '7px' : '7px').text(disp);
         }
       });
 
-      node.append('text')
-        .attr('dy', d => d.type === 'folder' ? 31 : 26)
-        .attr('text-anchor', 'middle')
-        .style('font-size', d => d.type === 'folder' ? '11px' : '10px')
-        .style('font-weight', d => d.type === 'folder' ? '600' : '400')
-        .style('fill', d => d.type === 'folder' ? '#d0c0f0' : '#b8b8d0')
-        .text(d => d.label);
-
       const tooltip = document.getElementById('tooltip');
 
-      node
+      // Node events
+      nodeSelection
         .on('mouseover', (ev, d) => {
-          tooltip.style.opacity = '1';
           const kind = d.type === 'folder' ? 'folder' : (d.ext ? `.${d.ext} file` : 'file');
-          tooltip.innerHTML = `<div class="tt-path">${d.id}</div><div class="tt-type">${kind}</div>`;
+          const extra = d.type === 'folder' && collapsedFolders.has(d.id) ? ' <span style="color:#9575cd">(collapsed)</span>' : '';
+          tooltip.innerHTML = `<div class="tt-path">${d.id}</div><div class="tt-type">${kind}${extra}</div>`;
+          tooltip.style.opacity = '1';
         })
         .on('mousemove', ev => {
           tooltip.style.left = (ev.clientX + 15) + 'px';
-          tooltip.style.top  = (ev.clientY - 10) + 'px';
+          tooltip.style.top = (ev.clientY - 10) + 'px';
         })
         .on('mouseout', () => { tooltip.style.opacity = '0'; })
         .on('click', (ev, d) => {
           ev.stopPropagation();
-          highlight(d, node, link, edges);
-          if (d.type === 'file') {
-            vscode.postMessage({ type: 'nodeClick', fullPath: d.fullPath, id: d.id });
+          if (d.type === 'folder') {
+            if (collapsedFolders.has(d.id)) collapsedFolders.delete(d.id);
+            else collapsedFolders.add(d.id);
+            updateVisibility();
+            return;
           }
+          highlight(d, nodeSelection, linkVisual, edges);
+          vscode.postMessage({ type: 'nodeClick', fullPath: d.fullPath, id: d.id });
         });
 
-      svg.on('click', () => clearHighlight(node, link));
+      // Edge events
+      linkHit
+        .on('mouseover', (ev, d) => {
+          if (d.edgeType === 'import') {
+            const names = d.imports || '(module)';
+            const src = d.source.label ?? d.source;
+            const tgt = d.target.label ?? d.target;
+            tooltip.innerHTML = `<div class="tt-path">${src} → ${tgt}</div><div class="tt-imports">imports: ${names}</div>`;
+          } else {
+            const folderPath = (d.source.id ?? d.source) + '/';
+            tooltip.innerHTML = `<div class="tt-folder">inside folder: ${folderPath}</div>`;
+          }
+          tooltip.style.opacity = '1';
+        })
+        .on('mousemove', ev => {
+          tooltip.style.left = (ev.clientX + 15) + 'px';
+          tooltip.style.top = (ev.clientY - 10) + 'px';
+        })
+        .on('mouseout', () => { tooltip.style.opacity = '0'; })
+        .on('click', (ev, d) => {
+          ev.stopPropagation();
+          // Deselect nodes
+          nodeSelection.classed('dimmed', false).classed('selected', false);
+          linkVisual.classed('highlighted', false);
+          // Highlight clicked edge
+          linkVisual
+            .classed('edge-selected', l => l === d)
+            .attr('marker-end', l => {
+              if (l.edgeType !== 'import') return null;
+              return l === d ? 'url(#arrow-edge-selected)' : 'url(#arrow-import)';
+            });
+          const srcLabel = d.source.label ?? d.source;
+          const tgtLabel = d.target.label ?? d.target;
+          const srcId = d.source.id ?? d.source;
+          const tgtId = d.target.id ?? d.target;
+          openEdgePanel(srcLabel, tgtLabel);
+          vscode.postMessage({ type: 'edgeClick', sourceId: srcId, targetId: tgtId, sourceLabel: srcLabel, targetLabel: tgtLabel, edgeType: d.edgeType, imports: d.imports });
+        });
+
+      svg.on('click', () => {
+        clearHighlight(nodeSelection, linkVisual);
+        linkVisual.classed('edge-selected', false)
+          .attr('marker-end', l => l.edgeType === 'import' ? 'url(#arrow-import)' : null);
+        closeEdgePanel();
+      });
 
       simulation.on('tick', () => {
-        link
+        const pos = sel => sel
           .attr('x1', d => d.source.x).attr('y1', d => d.source.y)
           .attr('x2', d => d.target.x).attr('y2', d => d.target.y);
-        node.attr('transform', d => `translate(${d.x},${d.y})`);
+        pos(linkVisual);
+        pos(linkHit);
+        nodeSelection.attr('transform', d => `translate(${d.x},${d.y})`);
       });
 
       buildLegend(nodes);
+      setupSearch();
+    }
+
+    function openEdgePanel(srcLabel, tgtLabel) {
+      document.getElementById('edge-panel-source').textContent = srcLabel;
+      document.getElementById('edge-panel-target').textContent = tgtLabel;
+      document.getElementById('edge-panel-text').textContent = 'Analyzing…';
+      document.getElementById('edge-panel').classList.add('open');
+    }
+
+    function closeEdgePanel() {
+      document.getElementById('edge-panel').classList.remove('open');
+    }
+
+    document.getElementById('edge-panel-close').addEventListener('click', e => {
+      e.stopPropagation();
+      closeEdgePanel();
+    });
+
+    function setupSearch() {
+      const input = document.getElementById('search-input');
+      const countEl = document.getElementById('search-count');
+
+      input.addEventListener('input', () => {
+        const q = input.value.trim().toLowerCase();
+        nodeSelection.classed('search-match', false);
+        if (!q) { countEl.textContent = ''; return; }
+
+        const matches = allNodes.filter(n => n.label.toLowerCase().includes(q));
+        countEl.textContent = matches.length ? `${matches.length} found` : 'none';
+        nodeSelection.classed('search-match', d => d.label.toLowerCase().includes(q));
+
+        if (matches.length > 0) {
+          const first = matches[0];
+          const scale = 3;
+          const tx = -first.x * scale + window.innerWidth / 2;
+          const ty = -first.y * scale + window.innerHeight / 2;
+          d3.select(svgEl).transition().duration(600)
+            .call(zoomBehavior.transform, d3.zoomIdentity.translate(tx, ty).scale(scale));
+        }
+      });
+
+      input.addEventListener('click', e => e.stopPropagation());
     }
 
     function buildLegend(nodes) {
       const legend = document.getElementById('legend');
       legend.innerHTML = `<div class="row"><div class="square" style="background:${FOLDER_COLOR}"></div>folder</div>`;
-
       const seen = {};
       nodes.filter(n => n.type === 'file').forEach(n => {
         if (!(n.ext in seen)) seen[n.ext] = EXT_COLORS[n.ext] || '#90a4ae';
       });
       Object.entries(seen).forEach(([ext, color]) => {
-        legend.innerHTML += `<div class="row"><div class="dot" style="background:${color}"></div>.${ext}</div>`;
+        legend.innerHTML += `<div class="row"><div class="dot" style="background:${color}"></div>.${ext || '?'}</div>`;
       });
-
       legend.innerHTML += `
         <div class="sep"></div>
         <div class="row">
@@ -241,28 +444,24 @@
         if (s === selected.id) connected.add(t);
         if (t === selected.id) connected.add(s);
       });
-
-      node.classed('dimmed',   d => !connected.has(d.id));
+      node.classed('dimmed', d => !connected.has(d.id));
       node.classed('selected', d => d.id === selected.id);
-
-      link
-        .classed('highlighted', l => {
-          const s = l.source.id ?? l.source;
-          const t = l.target.id ?? l.target;
-          return s === selected.id || t === selected.id;
-        })
-        .attr('marker-end', l => {
-          if (l.edgeType !== 'import') return null;
-          const s = l.source.id ?? l.source;
-          const t = l.target.id ?? l.target;
-          return (s === selected.id || t === selected.id) ? 'url(#arrow-highlighted)' : 'url(#arrow-import)';
-        });
+      link.classed('highlighted', l => {
+        const s = l.source.id ?? l.source;
+        const t = l.target.id ?? l.target;
+        return s === selected.id || t === selected.id;
+      }).attr('marker-end', l => {
+        if (l.edgeType !== 'import') return null;
+        const s = l.source.id ?? l.source;
+        const t = l.target.id ?? l.target;
+        return (s === selected.id || t === selected.id) ? 'url(#arrow-highlighted)' : 'url(#arrow-import)';
+      });
     }
 
     function clearHighlight(node, link) {
       node.classed('dimmed', false).classed('selected', false);
       link.classed('highlighted', false)
-          .attr('marker-end', l => l.edgeType === 'import' ? 'url(#arrow-import)' : null);
+        .attr('marker-end', l => l.edgeType === 'import' ? 'url(#arrow-import)' : null);
     }
   </script>
 </body>
