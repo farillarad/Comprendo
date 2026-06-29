@@ -7,6 +7,90 @@
     content="default-src 'none'; style-src {{cspSource}} 'unsafe-inline'; script-src 'unsafe-inline';">
   <link rel="stylesheet" href="{{stylesUri}}">
   <title>Comprendo</title>
+  <style>
+    .exp-section { margin-bottom: 14px; }
+    .exp-heading {
+      font-size: 11px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: var(--vscode-textLink-foreground, #4fc1ff);
+      margin: 0 0 6px 0;
+      padding-bottom: 4px;
+      border-bottom: 1px solid var(--vscode-panel-border, #3c3c3c);
+    }
+    .exp-body {
+      font-size: 12px;
+      line-height: 1.65;
+      color: var(--vscode-foreground, #cccccc);
+      margin: 0;
+    }
+    .code-token {
+      display: inline;
+      font-family: var(--vscode-editor-font-family, monospace);
+      font-size: 11px;
+      background: var(--vscode-textCodeBlock-background, rgba(255,255,255,0.08));
+      color: var(--vscode-textPreformat-foreground, #ce9178);
+      padding: 1px 5px;
+      border-radius: 3px;
+      cursor: pointer;
+      border: 1px solid transparent;
+      transition: border-color 0.15s, color 0.15s;
+    }
+    .code-token:hover {
+      border-color: var(--vscode-textLink-foreground, #4fc1ff);
+      color: var(--vscode-textLink-foreground, #4fc1ff);
+    }
+    .key-list { display: flex; flex-direction: column; gap: 7px; }
+    .key-item { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px; }
+    .key-desc { font-size: 11px; color: var(--vscode-descriptionForeground, #9d9d9d); line-height: 1.5; }
+    .flow-chart { display: flex; flex-direction: column; align-items: stretch; gap: 0; margin-top: 4px; }
+    .flow-step {
+      background: var(--vscode-editor-inactiveSelectionBackground, rgba(255,255,255,0.05));
+      border: 1px solid var(--vscode-panel-border, #3c3c3c);
+      border-radius: 4px;
+      padding: 6px 10px;
+      font-size: 11px;
+      color: var(--vscode-foreground, #cccccc);
+      line-height: 1.4;
+    }
+    .flow-arrow {
+      text-align: center;
+      color: var(--vscode-textLink-foreground, #4fc1ff);
+      font-size: 13px;
+      line-height: 1.4;
+      padding: 2px 0;
+    }
+    details.quick-summary {
+      margin-top: 14px;
+      border: 1px solid var(--vscode-panel-border, #3c3c3c);
+      border-radius: 6px;
+      overflow: hidden;
+    }
+    details.quick-summary > summary {
+      cursor: pointer;
+      font-size: 12px;
+      font-weight: 600;
+      padding: 8px 12px;
+      background: var(--vscode-editor-inactiveSelectionBackground, rgba(255,255,255,0.05));
+      user-select: none;
+      list-style: none;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      color: var(--vscode-foreground, #cccccc);
+    }
+    details.quick-summary > summary::-webkit-details-marker { display: none; }
+    details.quick-summary > summary::after { content: '▾'; font-size: 10px; opacity: 0.7; }
+    details.quick-summary[open] > summary::after { content: '▴'; }
+    .quick-summary-body {
+      font-size: 12px;
+      line-height: 1.6;
+      padding: 8px 12px;
+      margin: 0;
+      color: var(--vscode-foreground, #cccccc);
+    }
+  </style>
 </head>
 <body>
   <div id="app">
@@ -119,6 +203,110 @@
       document.getElementById(id).classList.remove('hidden');
     }
 
+    function escapeHtml(str) {
+      return String(str)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;');
+    }
+
+    function truncate(text, maxWords = 150) {
+      const words = String(text).trim().split(/\s+/);
+      return words.length <= maxWords ? text : words.slice(0, maxWords).join(' ') + '…';
+    }
+
+    function parseExplanation(content) {
+      try { return JSON.parse(content); } catch (_) {}
+      const m = content.match(/\{[\s\S]*\}/);
+      if (m) { try { return JSON.parse(m[0]); } catch (_) {} }
+      return null;
+    }
+
+    function renderText(text, keyElements) {
+      let safe = escapeHtml(truncate(text));
+      for (const el of (keyElements || [])) {
+        if (!el.name || !/^[\w$]+$/.test(el.name)) { continue; }
+        const t = escapeHtml(el.name);
+        const re = new RegExp('(?<![\\w$])' + t + '(?![\\w$])', 'g');
+        safe = safe.replace(re,
+          `<span class="code-token" data-token="${t}" onclick="explainToken(this.dataset.token)">${t}</span>`);
+      }
+      return safe;
+    }
+
+    function renderExplanation(content) {
+      const data = parseExplanation(content);
+      if (!data) {
+        return `<div class="exp-section"><p class="exp-body">${escapeHtml(content)}</p></div>`;
+      }
+
+      const { whatItDoes, howItWorks, keyElements, projectConnections, flowSteps, quickSummary } = data;
+      const keys = Array.isArray(keyElements) ? keyElements : [];
+      let html = '';
+
+      if (whatItDoes) {
+        html += `<div class="exp-section">
+          <h3 class="exp-heading">What this does</h3>
+          <p class="exp-body">${renderText(whatItDoes, keys)}</p>
+        </div>`;
+      }
+
+      if (howItWorks) {
+        html += `<div class="exp-section">
+          <h3 class="exp-heading">How it works</h3>
+          <p class="exp-body">${renderText(howItWorks, keys)}</p>
+        </div>`;
+      }
+
+      if (Array.isArray(flowSteps) && flowSteps.length > 1) {
+        const steps = flowSteps.map((step, i) =>
+          `<div class="flow-step">${escapeHtml(step)}</div>` +
+          (i < flowSteps.length - 1 ? '<div class="flow-arrow">↓</div>' : '')
+        ).join('');
+        html += `<div class="exp-section">
+          <h3 class="exp-heading">Flow</h3>
+          <div class="flow-chart">${steps}</div>
+        </div>`;
+      }
+
+      if (keys.length > 0) {
+        const items = keys.map(el => {
+          const t = escapeHtml(el.name || '');
+          return `<div class="key-item">
+            <span class="code-token" data-token="${t}" onclick="explainToken(this.dataset.token)">${t}</span>
+            <span class="key-desc">${escapeHtml(el.description || '')}</span>
+          </div>`;
+        }).join('');
+        html += `<div class="exp-section">
+          <h3 class="exp-heading">Key variables / functions</h3>
+          <div class="key-list">${items}</div>
+        </div>`;
+      }
+
+      if (projectConnections) {
+        html += `<div class="exp-section">
+          <h3 class="exp-heading">How it connects to the rest of the project</h3>
+          <p class="exp-body">${renderText(projectConnections, keys)}</p>
+        </div>`;
+      }
+
+      if (quickSummary) {
+        html += `<details class="quick-summary">
+          <summary>Quick Summary</summary>
+          <p class="quick-summary-body">${escapeHtml(quickSummary)}</p>
+        </details>`;
+      }
+
+      return html;
+    }
+
+    function explainToken(token) {
+      show('s-loading');
+      document.getElementById('loadingMsg').textContent = `Explaining ${token}…`;
+      vscode.postMessage({ type: 'explainToken', token });
+    }
+
     document.getElementById('quizBtn').addEventListener('click', () => {
       vscode.postMessage({ type: 'quizMe' });
     });
@@ -183,7 +371,7 @@
 
         case 'explanation':
           document.getElementById('expFileName').textContent = msg.fileName;
-          document.getElementById('expContent').textContent = msg.content;
+          document.getElementById('expContent').innerHTML = renderExplanation(msg.content);
           show('s-explanation');
           break;
 

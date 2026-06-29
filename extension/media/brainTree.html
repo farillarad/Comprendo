@@ -92,6 +92,40 @@
     .badge { pointer-events: none; }
     .badge-circle { fill: #0e0e20; stroke: #4a4a7a; stroke-width: 1px; }
     .badge-text { fill: #9fa8da; font-weight: 700; text-anchor: middle; dominant-baseline: central; }
+
+    /* ── Hover interactivity ── */
+    .node circle, .node rect {
+      transition: transform 0.18s cubic-bezier(0.34,1.56,0.64,1), filter 0.18s ease, opacity 0.18s ease;
+      transform-box: fill-box;
+      transform-origin: center;
+    }
+    @keyframes pulse-file {
+      0%,100% { filter: drop-shadow(0 0 7px rgba(255,255,255,0.28)); }
+      50%      { filter: drop-shadow(0 0 20px rgba(255,255,255,0.65)); }
+    }
+    @keyframes pulse-folder {
+      0%,100% { filter: drop-shadow(0 0 8px rgba(149,117,205,0.5)); }
+      50%      { filter: drop-shadow(0 0 22px rgba(149,117,205,0.92)); }
+    }
+    .node.hovered circle { transform: scale(1.45); animation: pulse-file   1.35s ease-in-out infinite; }
+    .node.hovered rect   { transform: scale(1.32); animation: pulse-folder  1.35s ease-in-out infinite; }
+    .node.neighbor circle { transform: scale(1.14); filter: drop-shadow(0 0 6px rgba(255,255,255,0.22)); }
+    .node.neighbor rect   { transform: scale(1.12); filter: drop-shadow(0 0 6px rgba(149,117,205,0.45)); }
+    .node.hover-dimmed circle, .node.hover-dimmed rect { opacity: 0.08; }
+    .node.hover-dimmed text, .node.hover-dimmed .badge { opacity: 0.08; }
+
+    @keyframes edge-flow {
+      from { stroke-dashoffset: 16; }
+      to   { stroke-dashoffset: 0; }
+    }
+    .link.link-hovered {
+      stroke: #ffb74d !important; stroke-opacity: 1 !important; stroke-width: 3.5px !important;
+      stroke-dasharray: 7,4 !important;
+      animation: edge-flow 0.55s linear infinite;
+      filter: drop-shadow(0 0 5px #ffb74d99);
+    }
+    .link.hover-highlighted { stroke-opacity: 0.95 !important; stroke-width: 2.5px !important; }
+    .link.hover-dimmed      { stroke-opacity: 0.04 !important; }
   </style>
 </head>
 <body>
@@ -141,6 +175,7 @@
     let nodeSelection, linkVisual, linkHit;
     const collapsedFolders = new Set();
     let simulation;
+    let activeSelection = false;
 
     window.addEventListener('message', ({ data: msg }) => {
       if (msg.type === 'graphData') {
@@ -292,15 +327,37 @@
       nodeSelection
         .on('mouseover', (ev, d) => {
           const kind = d.type === 'folder' ? 'folder' : (d.ext ? `.${d.ext} file` : 'file');
+          const connected = new Set([d.id]);
+          edges.forEach(l => {
+            const s = l.source.id ?? l.source;
+            const t = l.target.id ?? l.target;
+            if (s === d.id) connected.add(t);
+            if (t === d.id) connected.add(s);
+          });
+          const connCount = connected.size - 1;
           const extra = d.type === 'folder' && collapsedFolders.has(d.id) ? ' <span style="color:#9575cd">(collapsed)</span>' : '';
-          tooltip.innerHTML = `<div class="tt-path">${d.id}</div><div class="tt-type">${kind}${extra}</div>`;
+          tooltip.innerHTML = `<div class="tt-path">${d.id}</div><div class="tt-type">${kind}${extra}</div>${connCount > 0 ? `<div class="tt-imports">${connCount} connection${connCount !== 1 ? 's' : ''}</div>` : ''}`;
           tooltip.style.opacity = '1';
+
+          nodeSelection.classed('hovered', n => n.id === d.id);
+          if (!activeSelection) {
+            nodeSelection
+              .classed('hover-dimmed', n => !connected.has(n.id))
+              .classed('neighbor', n => connected.has(n.id) && n.id !== d.id);
+            linkVisual
+              .classed('hover-highlighted', l => { const s = l.source.id ?? l.source; const t = l.target.id ?? l.target; return s === d.id || t === d.id; })
+              .classed('hover-dimmed',      l => { const s = l.source.id ?? l.source; const t = l.target.id ?? l.target; return s !== d.id && t !== d.id; });
+          }
         })
         .on('mousemove', ev => {
           tooltip.style.left = (ev.clientX + 15) + 'px';
           tooltip.style.top = (ev.clientY - 10) + 'px';
         })
-        .on('mouseout', () => { tooltip.style.opacity = '0'; })
+        .on('mouseout', () => {
+          tooltip.style.opacity = '0';
+          nodeSelection.classed('hovered', false).classed('hover-dimmed', false).classed('neighbor', false);
+          linkVisual.classed('hover-highlighted', false).classed('hover-dimmed', false);
+        })
         .on('click', (ev, d) => {
           ev.stopPropagation();
           if (d.type === 'folder') {
@@ -309,6 +366,7 @@
             updateVisibility();
             return;
           }
+          activeSelection = true;
           highlight(d, nodeSelection, linkVisual, edges);
           vscode.postMessage({ type: 'nodeClick', fullPath: d.fullPath, id: d.id });
         });
@@ -316,22 +374,35 @@
       // Edge events
       linkHit
         .on('mouseover', (ev, d) => {
+          const srcId = d.source.id ?? d.source;
+          const tgtId = d.target.id ?? d.target;
           if (d.edgeType === 'import') {
             const names = d.imports || '(module)';
             const src = d.source.label ?? d.source;
             const tgt = d.target.label ?? d.target;
             tooltip.innerHTML = `<div class="tt-path">${src} → ${tgt}</div><div class="tt-imports">imports: ${names}</div>`;
           } else {
-            const folderPath = (d.source.id ?? d.source) + '/';
+            const folderPath = srcId + '/';
             tooltip.innerHTML = `<div class="tt-folder">inside folder: ${folderPath}</div>`;
           }
           tooltip.style.opacity = '1';
+
+          linkVisual.classed('link-hovered', l => l === d);
+          nodeSelection.classed('hovered', n => n.id === srcId || n.id === tgtId);
+          if (!activeSelection) {
+            nodeSelection.classed('hover-dimmed', n => n.id !== srcId && n.id !== tgtId);
+            linkVisual.classed('hover-dimmed', l => l !== d);
+          }
         })
         .on('mousemove', ev => {
           tooltip.style.left = (ev.clientX + 15) + 'px';
           tooltip.style.top = (ev.clientY - 10) + 'px';
         })
-        .on('mouseout', () => { tooltip.style.opacity = '0'; })
+        .on('mouseout', () => {
+          tooltip.style.opacity = '0';
+          linkVisual.classed('link-hovered', false).classed('hover-dimmed', false);
+          nodeSelection.classed('hovered', false).classed('hover-dimmed', false);
+        })
         .on('click', (ev, d) => {
           ev.stopPropagation();
           // Deselect nodes
@@ -348,11 +419,13 @@
           const tgtLabel = d.target.label ?? d.target;
           const srcId = d.source.id ?? d.source;
           const tgtId = d.target.id ?? d.target;
+          activeSelection = true;
           openEdgePanel(srcLabel, tgtLabel);
           vscode.postMessage({ type: 'edgeClick', sourceId: srcId, targetId: tgtId, sourceLabel: srcLabel, targetLabel: tgtLabel, edgeType: d.edgeType, imports: d.imports });
         });
 
       svg.on('click', () => {
+        activeSelection = false;
         clearHighlight(nodeSelection, linkVisual);
         linkVisual.classed('edge-selected', false)
           .attr('marker-end', l => l.edgeType === 'import' ? 'url(#arrow-import)' : null);
